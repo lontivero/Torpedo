@@ -8,10 +8,11 @@ namespace Torpedo
     {
         public static async Task Main(string[] args) 
         {
+            
             Console.WriteLine("Hello World!");
-            var torix = new Torix();
-            await torix.InitializeAsync();
-            await torix.GetAsync("http://ljxhgchpkhjbaioeaijwejewxnap.onion");
+            var torpedo = new Torpedo();
+            await torpedo.InitializeAsync();
+            await torpedo.GetAsync("http://ljxhgchpkhjbaioeaijwejewxnap.onion");
         }
     }
 }

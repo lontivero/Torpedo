@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 
 namespace Torpedo
@@ -12,40 +14,47 @@ namespace Torpedo
 
         public override void Write(short value)
         {
-            var data = BitConverter.GetBytes(value);
-            Array.Reverse(data);
-            base.Write(data);
+            WriteByteArray(BitConverter.GetBytes(value));
         }
 
         public override void Write(int value)
         {
-            var data = BitConverter.GetBytes(value);
-            Array.Reverse(data);
-            base.Write(data);
+            WriteByteArray(BitConverter.GetBytes(value));
         }
         public override void Write(long value)
         {
-            var data = BitConverter.GetBytes(value);
-            Array.Reverse(data);
-            base.Write(data);
+            WriteByteArray(BitConverter.GetBytes(value));
         }
 
         public override void Write(ushort value)
         {
-            var data = BitConverter.GetBytes(value);
-            Array.Reverse(data);
-            base.Write(data);
+            WriteByteArray(BitConverter.GetBytes(value));
         }
 
         public override void Write(uint value)
         {
-            var data = BitConverter.GetBytes(value);
-            Array.Reverse(data);
-            base.Write(data);
+            WriteByteArray(BitConverter.GetBytes(value));
         }
+
         public override void Write(ulong value)
         {
-            var data = BitConverter.GetBytes(value);
+            WriteByteArray(BitConverter.GetBytes(value));
+        }
+
+        public void Write(IPAddress ip)
+        {
+            Write(ip.AddressFamily == AddressFamily.InterNetwork ? 0x04b /* IPv4 */ : 0x06b /* IPv6 */ );
+            Write(ip.GetAddressBytes());
+        }
+
+        public override void Write(byte[] buffer)
+        {
+            Write(buffer.Length);
+            base.Write(buffer);
+        }
+
+        private void WriteByteArray(byte[] data)
+        {
             Array.Reverse(data);
             base.Write(data);
         }

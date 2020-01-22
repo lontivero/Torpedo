@@ -17,15 +17,21 @@ namespace Torpedo
         };
 
         public string Nickname { get; }
-        public IPEndPoint IPEndPoint { get; }
-        public ushort Port { get; }
+        public IPEndPoint DirectoryEndPoint { get; }
 
-        public string Url => $"http://{IPEndPoint}/tor/status-vote/current/consensus";
-        public DirectoryAuthority(string nickname, string ip, ushort dirPort, ushort port)
+        public IPEndPoint RouterEndPoint { get; }
+
+        public string Url => $"http://{DirectoryEndPoint}/tor/status-vote/current/consensus";
+        public DirectoryAuthority(string nickname, string ip, ushort dirPort, ushort orPort)
         {
             Nickname = nickname;
-            IPEndPoint = new IPEndPoint(IPAddress.Parse(ip), dirPort);
-            Port = port; 
+            DirectoryEndPoint = new IPEndPoint(IPAddress.Parse(ip), dirPort);
+            RouterEndPoint = new IPEndPoint(IPAddress.Parse(ip), orPort);
+        }
+
+        public override string ToString()
+        {
+            return $"Trusted Authority(Nickname: {Nickname}  Directory: {DirectoryEndPoint}  Onion Router: {RouterEndPoint})";
         }
     }
 }

@@ -8,7 +8,7 @@ namespace Torpedo
     {
         private static Random rnd = new Random();
 
-        public static T PickOne<T>(this IEnumerable<T> me)
+        public static T Random<T>(this IEnumerable<T> me)
         {
             var arr = me.ToArray();
             return arr[rnd.Next(arr.Length)];

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Torpedo
@@ -41,12 +42,11 @@ namespace Torpedo
 
     internal class Consensus
     {
-        public DirectoryAuthority RandomDirectoryAuthority()
-            => DirectoryAuthority.KnownAuthorities.PickOne();
+        private Logger logger = Logger.GetLogger<Consensus>();
 
         private List<OnionRouter> _parsed = new List<OnionRouter>();
 
-        public void Parse(Stream content)
+        public async Task ParseAsync(Stream content, CancellationToken ct)
         {
             var expectedFlags = StatusEntryS.Running | StatusEntryS.Valid | StatusEntryS.Fast | StatusEntryS.Stable;
 
@@ -56,7 +56,9 @@ namespace Torpedo
             {
                 while(!reader.EndOfStream && _parsed.Count < 200)
                 {
-                    var line = reader.ReadLine();
+                    if(ct.IsCancellationRequested) return;
+
+                    var line = await reader.ReadLineAsync().ConfigureAwait(false);
                     if(line.StartsWith("r "))
                     {
                         onionRouter = OnionRouter.FromConsensus(line);
@@ -76,8 +78,10 @@ namespace Torpedo
             }
         }
 
-        public OnionRouter GetRandomGuardRelay()
-            => _parsed.First(x=>x.Nickname.ToLower() == "harutorrelay");
-        //    => _parsed.Where(o=>o.Flags.HasFlag(StatusEntryS.Guard)).PickOne();
+        public IEnumerable<OnionRouter> OnionRouters
+            => _parsed;
+
+        public IEnumerable<OnionRouter> GuardRelays
+            => OnionRouters.Where(o=>o.Flags.HasFlag(StatusEntryS.Guard));
     }
 }

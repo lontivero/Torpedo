@@ -25,6 +25,7 @@ namespace Torpedo
         Authenticate = 131
     }
 
+
     class Cell
     {
         private static int FixLengthCellSize = 514;
@@ -37,7 +38,7 @@ namespace Torpedo
 
         internal Cell(){}
 
-        public Cell(ushort circuitId, CommandType command, params byte[] payload)
+        public Cell(uint circuitId, CommandType command, params byte[] payload)
         {
             CircuitId = circuitId;
             Command = command;
@@ -55,11 +56,9 @@ namespace Torpedo
 
         public Cell FromByteArray(byte[] data, int protocolVersion=4)
         {
-            using(var mem= new MemoryStream(data))
+            using(var mem = new MemoryStream(data))
             {
-                var cell = new Cell();
-                cell.ReadFrom(mem, protocolVersion);
-                return cell;
+                return Cell.ReadFrom(mem, protocolVersion);
             }
         }
 
@@ -79,19 +78,21 @@ namespace Torpedo
             }
         }
 
-        public void ReadFrom(Stream stream, int protocolVersion)
+        public static Cell ReadFrom(Stream stream, int protocolVersion)
         {
             using(var r = new BEBinaryReader(stream))
             {
-                CircuitId = (protocolVersion >= 4) 
+                var circuitId = (protocolVersion >= 4) 
                     ? (uint)r.ReadUInt32()
                     : (uint)r.ReadUInt16();
 
-                Command = (CommandType)r.ReadByte();
-                var len = Cell.IsVariableLengthCommand(Command)
+                var command = (CommandType)r.ReadByte();
+                var len = Cell.IsVariableLengthCommand(command)
                     ? r.ReadUInt16()
                     : MaxPayloadSize;
-                Payload = r.ReadBytes(len);
+                var payload = r.ReadBytes(len);
+
+                return new Cell(circuitId, command, payload);
             }
         }
 

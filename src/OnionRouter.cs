@@ -14,6 +14,7 @@ namespace Torpedo
         public IPEndPoint TorEndPoint { get; }
         public string Fingerprint { get; }
         public string KeyTap { get; private set; }
+        public string NTorKey { get; private set; }
         public StatusEntryS Flags { get; internal set; }
 
         public string DescriptorUrl => 
@@ -41,10 +42,19 @@ namespace Torpedo
         public override string ToString() =>
             $"OnionRouter(Nickname={Nickname}, DirEndPoint={DirEndPoint}, TorEndPoint={TorEndPoint}, Fingerprint={Fingerprint}, Flags={Flags}, ntor_key=%s)";
 
+        enum DescriptorParsingState
+        {
+            None,
+            IdentityEd25519,
+            MasterKeyEd25519,
+            OnionKey,
+            SigningKey
+        }
         public void ParseDescriptor(Stream content)
         {
-            var parsingKey = false;
-            var sb = new StringBuilder();
+            var pasrsingState = DescriptorParsingState.None;
+            StringBuilder sb = null;
+
             using(var reader = new StreamReader(content))
             { 
                 while(!reader.EndOfStream)
@@ -52,18 +62,24 @@ namespace Torpedo
                     var line = reader.ReadLine();
                     if(line.StartsWith("onion-key"))
                     {
-                        parsingKey = true;
+                        pasrsingState = DescriptorParsingState.OnionKey;
+                        sb = new StringBuilder();
                         continue;
                     }
 
-                    if(parsingKey)
+                    if(pasrsingState == DescriptorParsingState.OnionKey)
                     {
                         sb.Append(line);
-                        if(line.Contains("END RSA PUBLIC KEY") ) break;
+                        if(line.Contains("END RSA PUBLIC KEY") ) 
+                        {
+                            pasrsingState = DescriptorParsingState.None;
+                            KeyTap = sb.ToString();
+                        }
                     }
+                    if(line.StartsWith("ntor-onion-key"))
+                        NTorKey = line.Substring(line.IndexOf(" "));
                 }
             }
-            KeyTap = sb.ToString();
         }
     }
 }

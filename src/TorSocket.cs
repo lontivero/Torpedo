@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
@@ -7,7 +11,10 @@ namespace Torpedo
 {
     class TorSocket
     {
-        private byte[] _protocolVersion;
+        private Logger logger = Logger.GetLogger<TorSocket>();
+
+        private List<int> _protocolVersions = new List<int>();
+
         public OnionRouter GuardRelay { get; }
         private SslStream _stream;
 
@@ -18,6 +25,7 @@ namespace Torpedo
 
         public void Connect()
         {
+            logger.Debug($"Connectiong guard relay {GuardRelay.TorEndPoint}");
             var socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
             socket.Connect(GuardRelay.TorEndPoint);
             var networkStream = new NetworkStream(socket, false);
@@ -25,10 +33,19 @@ namespace Torpedo
             _stream = new SslStream(networkStream, true,
                 new RemoteCertificateValidationCallback(ValidateServerCertificate), null);
             _stream.AuthenticateAsClient(GuardRelay.TorEndPoint.Address.ToString());
-                // This is where you read and send data
 
+            Handshake();
+        }
+
+        public void Handshake()
+        {
+            logger.Debug($"Handshaking....");
             SendVersions();
             RetrieveVersions();
+
+            RetrieveCerts();
+            RetrieveNetInfo();
+            SendNetInfo();
         }
 
         public static bool ValidateServerCertificate(object sender, 
@@ -40,44 +57,74 @@ namespace Torpedo
 
         internal void SendVersions()
         {
-            var cell = new Cell(0, CommandType.Versions, Packer.Pack("^3S", 3, 4, 5));
+            logger.Debug($"...Sending version +4");
+
+            var cell = new Cell(0, CommandType.Versions, new byte[] { 0, 4 });
             cell.WriteTo(_stream);
         }
 
         private void RetrieveVersions()
         {
-            var cell = new Cell();
-            cell.ReadFrom(_stream, 0);
+            var cell = Cell.ReadFrom(_stream, 0);
 
-            _protocolVersion = cell.Payload;
-            
+            using(var reader = new BEBinaryReader(new MemoryStream(cell.Payload)))
+            {
+                _protocolVersions.Add(reader.ReadInt16());
+            }
+
+            logger.Debug($"...Received versions [{string.Join(", ", _protocolVersions)}]" );
         }
-
-#if false
-
 
         private void RetrieveCerts()
         {
-            self.retrieve_cell(ignore_response=True)
-
-            log.debug("Retrieving AUTH_CHALLENGE cell...")
-            self.retrieve_cell(ignore_response=True)
+            Cell.ReadFrom(_stream, 0);
+            logger.Debug("Retrieving AUTH_CHALLENGE cell...");
+            Cell.ReadFrom(_stream, 0);
         }
 
         private void RetrieveNetInfo()
         {
-            self.retrieve_cell(ignore_response=True)
+            Cell.ReadFrom(_stream, 0);
         }
+
+        
+        // If version 2 or higher is negotiated, each party sends the other a NETINFO cell.
+        // The cell's payload is:
+        // 
+        // - Timestamp              [4 bytes]
+        // - Other OR's address     [variable]
+        // - Number of addresses    [1 byte]
+        // - This OR's addresses    [variable]
+        // 
+        // Address format:
+        // 
+        // - Type   (1 octet)
+        // - Length (1 octet)
+        // - Value  (variable-width)
+        // "Length" is the length of the Value field.
+        // "Type" is one of:
+        // - 0x00 -- Hostname
+        // - 0x04 -- IPv4 address
+        // - 0x06 -- IPv6 address
+        // - 0xF0 -- Error, transient
+        // - 0xF1 -- Error, nontransient
 
         private void SendNetInfo()
         {
-            self._socket.write(Cell(0, CommandType.NETINFO, [
-                time(),
-                0x04, 0x04, self._guard_relay.ip,
-                0x01,
-                0x04, 0x04, 0
-            ]).get_bytes())        
+            var ip = this.GuardRelay.TorEndPoint.Address;
+            using (var mem = new MemoryStream())
+            using (var writer = new BEBinaryWriter(mem))
+            {
+                writer.Write(time );
+                /* Address */
+                writer.Write(ip);
+
+                writer.Write(0x01b);
+                writer.Write(IPAddress.None);
+
+                var cell = new Cell(0, CommandType.NetInfo, mem.ToArray());
+                cell.WriteTo(_stream);
+            }
         }
-#endif
     }
 }
