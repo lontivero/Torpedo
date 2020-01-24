@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Net;
 using System.Text;
 
 namespace Torpedo
@@ -55,6 +56,14 @@ namespace Torpedo
             var data = base.ReadBytes(sizeof(ulong));
             Array.Reverse(data);
             return BitConverter.ToUInt64(data);
+        }
+
+        public IPAddress ReadIPAddress()
+        {
+            var type = ReadByte(); // type IPv4 or IPv6
+            var len = ReadByte();
+            var ipBuffer = ReadBytes(len);
+            return new IPAddress(ipBuffer);
         }
     }
 }

@@ -41,15 +41,8 @@ namespace Torpedo
             WriteByteArray(BitConverter.GetBytes(value));
         }
 
-        public void Write(IPAddress ip)
-        {
-            Write(ip.AddressFamily == AddressFamily.InterNetwork ? 0x04b /* IPv4 */ : 0x06b /* IPv6 */ );
-            Write(ip.GetAddressBytes());
-        }
-
         public override void Write(byte[] buffer)
         {
-            Write(buffer.Length);
             base.Write(buffer);
         }
 

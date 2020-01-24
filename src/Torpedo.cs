@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,24 +23,43 @@ namespace Torpedo
             var da = DirectoryAuthority.KnownAuthorities.Random();
 
             logger.Debug($"Using {da}");
-            logger.Debug($"Downloading consensus document from {da.Url}");
+            
+            using var contentStream = await GetConsensusDocumentAsync(da);
 
-            using(var http = new HttpClient())
-            {
-                var response = await http.GetAsync(da.Url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
-                response.EnsureSuccessStatusCode();
-                
-                using(var contentStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
-                {
-                    logger.Info("Parsisng consensus document");
-                    var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-                    await Consensus.ParseAsync(contentStream, cts.Token);
-                    contentStream.Close();
-                }
-            }
+            logger.Info("Parsisng consensus document");
+            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            await Consensus.ParseAsync(contentStream, cts.Token);
 
+            //await SaveConsensusDocumentAsync(da, contentStream);
             _isInitialized = true;
             logger.Info("Initialized");
+        }
+
+        private Task SaveConsensusDocumentAsync(DirectoryAuthority da, Stream contentStream)
+        {
+            using var file = File.OpenWrite(da.Nickname);
+            return contentStream.CopyToAsync(file);
+        }
+
+        private async Task<Stream> GetConsensusDocumentAsync(DirectoryAuthority da)
+        {
+            if (false) //File.Exists(da.Nickname))
+            {
+                logger.Debug($"Using cached consensus document from {da.Nickname}");
+                return File.OpenRead(da.Nickname);
+            }
+            else
+            {
+                logger.Debug($"Downloading consensus document from {da.Url}");
+
+                using(var http = new HttpClient())
+                {
+                    var response = await http.GetAsync(da.Url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                    response.EnsureSuccessStatusCode();
+                    
+                    return await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                }
+            }
         }
 
         public async Task<string> GetAsync(string url)

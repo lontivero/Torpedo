@@ -34,10 +34,11 @@ namespace Torpedo
         Named           = 0x0040,
         NoEdConsensus   = 0x0080,
         Stable          = 0x0100,
-        Running         = 0x0200,
-        Unnamed         = 0x0400,
-        Valid           = 0x0800,
-        V2dir           = 0x1000
+        StaleDesc       = 0x0200,
+        Running         = 0x0400,
+        Unnamed         = 0x0800,
+        Valid           = 0x1000,
+        V2dir           = 0x2000
     };
 
     internal class Consensus
@@ -52,27 +53,25 @@ namespace Torpedo
 
             OnionRouter onionRouter = null;
             
-            using(var reader = new StreamReader(content))
+            using var reader = new StreamReader(content);
+            while(!reader.EndOfStream && _parsed.Count < 200)
             {
-                while(!reader.EndOfStream && _parsed.Count < 200)
-                {
-                    if(ct.IsCancellationRequested) return;
+                if(ct.IsCancellationRequested) return;
 
-                    var line = await reader.ReadLineAsync().ConfigureAwait(false);
-                    if(line.StartsWith("r "))
+                var line = await reader.ReadLineAsync().ConfigureAwait(false);
+                if(line.StartsWith("r "))
+                {
+                    onionRouter = OnionRouter.FromConsensus(line);
+                }
+                else if(line.StartsWith("s "))
+                {
+                    foreach(var parsedFlag in line.Substring(2).Split(' ', StringSplitOptions.RemoveEmptyEntries))
                     {
-                        onionRouter = OnionRouter.FromConsensus(line);
+                        onionRouter.Flags |= (StatusEntryS)Enum.Parse(typeof(StatusEntryS), parsedFlag, true);
                     }
-                    else if(line.StartsWith("s "))
+                    if(onionRouter.Flags.HasFlag(expectedFlags))
                     {
-                        foreach(var parsedFlag in line.Substring(2).Split(' ', StringSplitOptions.RemoveEmptyEntries))
-                        {
-                            onionRouter.Flags |= (StatusEntryS)Enum.Parse(typeof(StatusEntryS), parsedFlag, true);
-                        }
-                        if(onionRouter.Flags.HasFlag(expectedFlags))
-                        {
-                            _parsed.Add(onionRouter);
-                        }
+                        _parsed.Add(onionRouter);
                     }
                 }
             }

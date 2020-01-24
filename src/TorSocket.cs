@@ -1,11 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
 
 namespace Torpedo
 {
@@ -15,8 +14,11 @@ namespace Torpedo
 
         private List<int> _protocolVersions = new List<int>();
 
-        public OnionRouter GuardRelay { get; }
+        public int ProtocolVersion => _protocolVersions.Any() ?  _protocolVersions.Max() : 0;
         private SslStream _stream;
+
+        public OnionRouter GuardRelay { get; }
+        public IPAddress MyIPAddress { get; private set; }
 
         public TorSocket(OnionRouter guardRelay)
         {
@@ -59,17 +61,16 @@ namespace Torpedo
         {
             logger.Debug($"...Sending version +4");
 
-            var cell = new Cell(0, CommandType.Versions, new byte[] { 0, 4 });
-            cell.WriteTo(_stream);
+            var cell = new VersionsCell(0, 4);
+            cell.WriteTo(_stream, ProtocolVersion);
         }
 
         private void RetrieveVersions()
         {
-            var cell = Cell.ReadFrom(_stream, 0);
-
-            using(var reader = new BEBinaryReader(new MemoryStream(cell.Payload)))
+            var cell =  (VersionsCell)Cell.ReadFrom(_stream, ProtocolVersion);
+            foreach(int ver in cell.Versions)
             {
-                _protocolVersions.Add(reader.ReadInt16());
+                _protocolVersions.Add(ver);
             }
 
             logger.Debug($"...Received versions [{string.Join(", ", _protocolVersions)}]" );
@@ -77,54 +78,29 @@ namespace Torpedo
 
         private void RetrieveCerts()
         {
-            Cell.ReadFrom(_stream, 0);
+            logger.Debug("Retrieving CERTS cell...");
+            Cell.ReadFrom(_stream, ProtocolVersion);
             logger.Debug("Retrieving AUTH_CHALLENGE cell...");
-            Cell.ReadFrom(_stream, 0);
+            Cell.ReadFrom(_stream, ProtocolVersion);
         }
 
         private void RetrieveNetInfo()
         {
-            Cell.ReadFrom(_stream, 0);
-        }
+            logger.Debug("Retrieving NET_INFO cell...");
+            var netInfo = (NetInfoCell)Cell.ReadFrom(_stream, ProtocolVersion);
+            MyIPAddress = netInfo.MyIPAddress;
 
-        
-        // If version 2 or higher is negotiated, each party sends the other a NETINFO cell.
-        // The cell's payload is:
-        // 
-        // - Timestamp              [4 bytes]
-        // - Other OR's address     [variable]
-        // - Number of addresses    [1 byte]
-        // - This OR's addresses    [variable]
-        // 
-        // Address format:
-        // 
-        // - Type   (1 octet)
-        // - Length (1 octet)
-        // - Value  (variable-width)
-        // "Length" is the length of the Value field.
-        // "Type" is one of:
-        // - 0x00 -- Hostname
-        // - 0x04 -- IPv4 address
-        // - 0x06 -- IPv6 address
-        // - 0xF0 -- Error, transient
-        // - 0xF1 -- Error, nontransient
+            logger.Debug($"...Received Timestamp {netInfo.Timestamp} {netInfo.MyIPAddress}");
+        }
 
         private void SendNetInfo()
         {
-            var ip = this.GuardRelay.TorEndPoint.Address;
-            using (var mem = new MemoryStream())
-            using (var writer = new BEBinaryWriter(mem))
-            {
-                writer.Write(time );
-                /* Address */
-                writer.Write(ip);
-
-                writer.Write(0x01b);
-                writer.Write(IPAddress.None);
-
-                var cell = new Cell(0, CommandType.NetInfo, mem.ToArray());
-                cell.WriteTo(_stream);
-            }
+            var netInfo = new NetInfoCell(0);
+            netInfo.Timestamp = DateTimeOffset.UtcNow;
+            netInfo.MyIPAddress = this.GuardRelay.TorEndPoint.Address;
+            netInfo.OtherIPs.Add(MyIPAddress);
+            netInfo.WriteTo(_stream, ProtocolVersion);
+            logger.Debug($"...Sending Timestamp {netInfo.Timestamp} {netInfo.MyIPAddress}");
         }
     }
 }
