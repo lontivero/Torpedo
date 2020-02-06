@@ -39,8 +39,10 @@ namespace Torpedo
             }
         }
 
-        protected override void WritePayload(BinaryWriter writer)
+        protected override byte[] GetPayload()
         {
+            using var mem = new MemoryStream();
+            using var writer = new BEBinaryWriter(mem);
             writer.Write((uint)Timestamp.ToUnixTimeSeconds());
             writer.Write(MyIPAddress);
             writer.Write((byte)OtherIPs.Count);
@@ -48,6 +50,7 @@ namespace Torpedo
             {
                 writer.Write(remote);
             }
+            return mem.ToArray();
         }
     }
 }

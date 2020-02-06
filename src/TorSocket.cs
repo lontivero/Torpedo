@@ -57,17 +57,15 @@ namespace Torpedo
             return true;
         }
 
-        internal void SendVersions()
+        private void SendVersions()
         {
             logger.Debug($"...Sending version +4");
-
-            var cell = new VersionsCell(0, 4);
-            cell.WriteTo(_stream, ProtocolVersion);
+            SendCell(new VersionsCell(0, 4));
         }
 
         private void RetrieveVersions()
         {
-            var cell =  (VersionsCell)Cell.ReadFrom(_stream, ProtocolVersion);
+            var cell =  RetrieveCell<VersionsCell>();
             foreach(int ver in cell.Versions)
             {
                 _protocolVersions.Add(ver);
@@ -87,7 +85,7 @@ namespace Torpedo
         private void RetrieveNetInfo()
         {
             logger.Debug("Retrieving NET_INFO cell...");
-            var netInfo = (NetInfoCell)Cell.ReadFrom(_stream, ProtocolVersion);
+            var netInfo = RetrieveCell<NetInfoCell>();
             MyIPAddress = netInfo.MyIPAddress;
 
             logger.Debug($"...Received Timestamp {netInfo.Timestamp} {netInfo.MyIPAddress}");
@@ -99,8 +97,18 @@ namespace Torpedo
             netInfo.Timestamp = DateTimeOffset.UtcNow;
             netInfo.MyIPAddress = this.GuardRelay.TorEndPoint.Address;
             netInfo.OtherIPs.Add(MyIPAddress);
-            netInfo.WriteTo(_stream, ProtocolVersion);
+            SendCell(netInfo);
             logger.Debug($"...Sending Timestamp {netInfo.Timestamp} {netInfo.MyIPAddress}");
+        }
+
+        internal void SendCell(Cell cell)
+        {
+            cell.WriteTo(_stream, ProtocolVersion);
+        }
+
+        internal T RetrieveCell<T>() where T: Cell
+        {
+            return Cell.ReadFrom(_stream, ProtocolVersion) as T;
         }
     }
 }

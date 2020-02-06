@@ -13,17 +13,6 @@ namespace Torpedo
             Versions = versions;
         }
 
-        protected override byte[] GetPayload()
-        {
-            using var mem = new MemoryStream(Versions.Length * sizeof(ushort));
-            using var writer = new BEBinaryWriter(mem);
-            foreach(var ver in Versions)
-            {
-                writer.Write(ver);
-            }
-            return mem.ToArray();
-        }
-
         protected override void ReadPayload(BinaryReader reader)
         {
             var payloadLength = reader.ReadUInt16();
@@ -34,6 +23,17 @@ namespace Torpedo
                 vers.Add(reader.ReadUInt16());
             }
             Versions = vers.ToArray();
+        }
+
+        protected override byte[] GetPayload()
+        {
+            using var mem = new MemoryStream(Versions.Length * sizeof(ushort));
+            using var writer = new BEBinaryWriter(mem);
+            foreach(var ver in Versions)
+            {
+                writer.Write(ver);
+            }
+            return mem.ToArray();
         }
     }
 }

@@ -37,7 +37,8 @@ namespace test
             // serialize 
             var serializedCell = netInfo.ToByteArray(protocolVersion: 4);
             var expected = new byte[]{0, 0, 0, 0, 8, 113, 44, 214, 150, 4, 4, 127, 0, 0, 1, 1, 4, 4, 186, 56, 221, 91};
-            Assert.Equal(expected, serializedCell);
+            Assert.Equal(FixedLengthCell.FixLengthCellSize, serializedCell.Length);
+            Assert.Equal(expected, serializedCell[..expected.Length]);
 
             // deserialize
             var stream = new MemoryStream(serializedCell);

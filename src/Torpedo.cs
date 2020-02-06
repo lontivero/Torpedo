@@ -43,21 +43,30 @@ namespace Torpedo
 
         private async Task<Stream> GetConsensusDocumentAsync(DirectoryAuthority da)
         {
-            if (false) //File.Exists(da.Nickname))
+            while(true)
             {
-                logger.Debug($"Using cached consensus document from {da.Nickname}");
-                return File.OpenRead(da.Nickname);
-            }
-            else
-            {
-                logger.Debug($"Downloading consensus document from {da.Url}");
+                try{
+                    if (false) //File.Exists(da.Nickname))
+                    {
+                        logger.Debug($"Using cached consensus document from {da.Nickname}");
+                        return File.OpenRead(da.Nickname);
+                    }
+                    else
+                    {
+                        logger.Debug($"Downloading consensus document from {da.Url}");
 
-                using(var http = new HttpClient())
+                        using(var http = new HttpClient())
+                        {
+                            var response = await http.GetAsync(da.Url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                            response.EnsureSuccessStatusCode();
+                            
+                            return await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                        }
+                    }
+                }
+                catch(HttpRequestException e)
                 {
-                    var response = await http.GetAsync(da.Url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
-                    response.EnsureSuccessStatusCode();
-                    
-                    return await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                    logger.Debug($"{da.Url} failed with {e.Message}. Trying with a different directory.");
                 }
             }
         }
@@ -84,11 +93,15 @@ namespace Torpedo
                     guardRelay.ParseDescriptor(content);
                     content.Close();
 
-                    logger.Debug($"ntor-onion-key: {guardRelay.NTorKey}");
+                    logger.Debug($"ntor-onion-key: '{guardRelay.NTorKey}'");
                 }
             }
             var socket = new TorSocket(guardRelay);
             socket.Connect();
+
+            var circuit = new Circuit(socket);
+            circuit.Create(guardRelay);
+
             return null;
         }
     }

@@ -1,0 +1,143 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Net;
+using System.Net.Security;
+using System.Net.Sockets;
+using System.Text;
+
+namespace Torpedo
+{
+    enum CommandType
+    {
+        Padding = 0,
+        Create = 1,
+        Created = 2,
+        Relay = 3,
+        Destroy = 4,
+        CreateFast = 5,
+        CreatedFast = 6,
+        NetInfo = 8,
+        RelayEarly = 9,
+        Create2 = 10,
+        Created2 = 11,
+        Versions = 7,
+        VPadding = 128,
+        Certs = 129,
+        AuthChallenge = 130,
+        Authenticate = 131
+    }
+
+
+    class Cellx
+    {
+        private static int FixLengthCellSize = 514;
+        private static int MaxPayloadSize = 509;
+
+
+        public uint CircuitId { get; private set; }
+        public CommandType Command { get; private set; }
+        public object Payload { get; private set; }
+
+        internal Cellx(){}
+
+        public Cellx(uint circuitId, CommandType command, params byte[] payload)
+        {
+            CircuitId = circuitId;
+            Command = command;
+            Payload = payload;
+        }
+
+        public byte[] ToByteArray()
+        {
+            using(var mem = new MemoryStream())
+            {
+                WriteTo(mem);
+                return mem.ToArray();
+            }
+        }
+
+        public Cell FromByteArray(byte[] data, int protocolVersion=4)
+        {
+            using var mem = new MemoryStream(data);
+            return Cell.ReadFrom(mem, protocolVersion);
+        }
+
+        public void WriteTo(Stream stream, int protocolVersion)
+        {
+            byte[] payloadBytes;
+            switch(Command)
+            {
+                case CommandType.Versions:
+                    var versions = (ushort[])Payload;
+                    payloadBytes = Packer.Pack($"!S{versions.Length}", versions);
+                    break;
+
+                case CommandType.NetInfo:
+                    var (timestamp, myIPAddress, otherIPs) = (ValueTuple<DateTimeOffset, IPAddress, IPAddress[]>)Payload;
+                    payloadBytes = Packer.Pack("!IbbAbbbA", 
+                        timestamp.ToUnixTimeSeconds(),
+                        myIPAddress.AddressFamily == AddressFamily.InterNetwork 
+                            ? 0x04  // IPv4 
+                            : 0x06, // IPv6 
+                        myIPAddress.AddressFamily == AddressFamily.InterNetwork
+                            ? 0x04  // IPv4 is 4 bytes length
+                            : 0x16, // IPv6 is 16 bytes length 
+                        myIPAddress.GetAddressBytes(),
+                        1,
+                        otherIPs[0].AddressFamily == AddressFamily.InterNetwork 
+                            ? 0x04  // IPv4 
+                            : 0x06, // IPv6 
+                        otherIPs[0].AddressFamily == AddressFamily.InterNetwork
+                            ? 0x04  // IPv4 is 4 bytes length
+                            : 0x16, // IPv6 is 16 bytes length 
+                        otherIPs[0].GetAddressBytes()
+                    );
+                    break;
+                case CommandType.Relay:
+                    payloadBytes = (byte[])Payload;
+                    break;
+                default:
+                    throw new Exception($"Invalid payload format for command: {Command}");
+            }
+            var headerDescription = (protocolVersion < 4 ? "Sb" : "Ib");
+            if (IsVariableLengthCommand(Command))
+            {
+                payloadBytes = Packer.Pack(headerDescription + "bA", CircuitId, Command, payloadBytes.Length, payloadBytes);
+            }
+            else
+            {
+                payloadBytes = Packer.Pack(headerDescription + $"{MaxPayloadSize}s", CircuitId, Command, payloadBytes);
+            }
+            stream.Write(payloadBytes, 0, payloadBytes.Length);
+        }
+
+        public static Cell ReadFrom(Stream stream, int protocolVersion)
+        {
+            using(var r = new BEBinaryReader(stream))
+            {
+                var circuitId = (protocolVersion >= 4) 
+                    ? (uint)r.ReadUInt32()
+                    : (uint)r.ReadUInt16();
+
+                var command = (CommandType)r.ReadByte();
+                var len = Cell.IsVariableLengthCommand(command)
+                    ? r.ReadUInt16()
+                    : MaxPayloadSize;
+                var payloadBytes = r.ReadBytes(len);
+
+                switch(command)
+                {
+                    case CommandType.Versions:
+                        var versions = Packer.Unpack($"!S{len/sizeof(ushort)}", payloadBytes, 0);
+                        break;
+                }
+            }
+        }
+
+        public static bool IsVariableLengthCommand(CommandType command)
+        {
+            return command == CommandType.Versions || command >= CommandType.VPadding;
+        }
+    }
+}

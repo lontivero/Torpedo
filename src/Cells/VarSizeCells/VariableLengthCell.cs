@@ -15,7 +15,5 @@ namespace Torpedo
             writer.Write((ushort)payload.Length);
             writer.Write(payload);
         }
-
-        protected abstract byte[] GetPayload();
     }
 }

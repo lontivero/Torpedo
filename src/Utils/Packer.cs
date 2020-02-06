@@ -1,55 +1,35 @@
 using System;
+using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
 
-namespace test
+namespace Torpedo
 {
 	public abstract class Packer
 	{
 		private static readonly Packer SwapConv = new SwapConverter();
 		private static readonly Packer CopyConv = new CopyConverter();
 
+		public static Packer LittleEndian => BitConverter.IsLittleEndian 
+			? CopyConv 
+			: SwapConv;
+
+		public static Packer BigEndian => BitConverter.IsLittleEndian 
+			? SwapConv 
+			: CopyConv;
+
+		public static Packer Native => CopyConv;
+
 		public static readonly bool IsLittleEndian = BitConverter.IsLittleEndian;
 
-		public bool ToBoolean(byte[] value, int offset)
-		{
-			return BitConverter.ToBoolean(value, offset);
-		}
-
-		public char ToChar(byte[] value, int offset)
-		{
-			return unchecked((char)(FromBytes(value, offset, sizeof(char))));
-		}
-
-		public short ToInt16(byte[] value, int offset)
-		{
-			return unchecked((short)(FromBytes(value, offset, sizeof(short))));
-		}
-
-		public int ToInt32(byte[] value, int offset)
-		{
-			return unchecked((int)(FromBytes(value, offset, sizeof(int))));
-		}
-
-		public long ToInt64(byte[] value, int offset)
-		{
-			return FromBytes(value, offset, sizeof(long));
-		}
-
-		public ushort ToUInt16(byte[] value, int offset)
-		{
-			return unchecked((ushort)(FromBytes(value, offset, sizeof(ushort))));
-		}
-
-		public uint ToUInt32(byte[] value, int offset)
-		{
-			return unchecked((uint)(FromBytes(value, offset, sizeof(uint))));
-		}
-
-		public ulong ToUInt64(byte[] value, int offset)
-		{
-			return unchecked((ulong)(FromBytes(value, offset, sizeof(ulong))));
-		}
+		public bool ToBoolean(byte[] value, int offset) => BitConverter.ToBoolean(value, offset);
+		public char ToChar(byte[] value, int offset)    =>	unchecked((char)(FromBytes(value, offset, sizeof(char))));
+		public short ToInt16(byte[] value, int offset)  => unchecked((short)(FromBytes(value, offset, sizeof(short))));
+		public int ToInt32(byte[] value, int offset)    => unchecked((int)(FromBytes(value, offset, sizeof(int))));
+		public long ToInt64(byte[] value, int offset)   => 	FromBytes(value, offset, sizeof(long));
+		public ushort ToUInt16(byte[] value, int offset)=> unchecked((ushort)(FromBytes(value, offset, sizeof(ushort))));
+		public uint ToUInt32(byte[] value, int offset)  => unchecked((uint)(FromBytes(value, offset, sizeof(uint))));
+		public ulong ToUInt64(byte[] value, int offset) => unchecked((ulong)(FromBytes(value, offset, sizeof(ulong))));
 
 		private byte[] GetBytes(long value, int bytes)
 		{
@@ -65,66 +45,21 @@ namespace test
 			return buffer;
 		}
 
-		public byte[] GetBytes(bool value)
-		{
-			return BitConverter.GetBytes(value);
-		}
-
-		public byte[] GetBytes(char value)
-		{
-			return GetBytes(value, sizeof(char));
-		}
-
-		public byte[] GetBytes(short value)
-		{
-			return GetBytes(value, sizeof(short));
-		}
-
-		public byte[] GetBytes(int value)
-		{
-			return GetBytes(value, sizeof(int));
-		}
-
-		public byte[] GetBytes(long value)
-		{
-			return GetBytes(value, sizeof(long));
-		}
-
-		public byte[] GetBytes(ushort value)
-		{
-			return GetBytes(value, sizeof(ushort));
-		}
-
-		public byte[] GetBytes(uint value)
-		{
-			return GetBytes(value, sizeof(uint));
-		}
-
-		public byte[] GetBytes(ulong value)
-		{
-			return GetBytes(unchecked((long)value), sizeof(ulong));
-		}
-
-		public byte[] GetBytes(byte[] value)
-		{
-			return GetBytes(value, value.Length);
-		}
+		public byte[] GetBytes(bool value)   => BitConverter.GetBytes(value);
+		public byte[] GetBytes(char value)   => GetBytes(value, sizeof(char));
+		public byte[] GetBytes(short value)  => GetBytes(value, sizeof(short));
+		public byte[] GetBytes(int value)    => GetBytes(value, sizeof(int));
+		public byte[] GetBytes(long value)   => GetBytes(value, sizeof(long));
+		public byte[] GetBytes(ushort value) => GetBytes(value, sizeof(ushort));
+		public byte[] GetBytes(uint value)   => GetBytes(value, sizeof(uint));
+		public byte[] GetBytes(ulong value)  => GetBytes(unchecked((long)value), sizeof(ulong));
+		public byte[] GetBytes(byte[] value) => GetBytes(value, value.Length);
 
 		protected abstract long FromBytes(byte[] value, int offset, int count);
 		protected abstract void CopyBytes(long value, int bytes, byte[] buffer, int index);
 		protected abstract void CopyBytes(byte[] from, int fromOffset, byte[] to, int toOffset, int count);
 
-
-		public static Packer LittleEndian => BitConverter.IsLittleEndian ? CopyConv : SwapConv;
-
-		public static Packer BigEndian => BitConverter.IsLittleEndian ? SwapConv : CopyConv;
-
-		public static Packer Native => CopyConv;
-
-		private static int Align(int current, int align)
-		{
-			return ((current + align - 1) / align) * align;
-		}
+		private static int Align(int current, int align) => ((current + align - 1) / align) * align;
 
 		private class PackContext
 		{
@@ -136,42 +71,38 @@ namespace test
 			internal Packer conv;
 			internal int repeat;
 
+			private ArrayPool<byte> _byteArrayPool;
+
+			public PackContext()
+			{
+				_byteArrayPool = ArrayPool<byte>.Create();
+				_buffer = ArrayPool<byte>.Shared.Rent(1024);
+				_next = 0;
+			}
+
 			public void Add(byte[] group)
 			{
-				if (_buffer == null)
-				{
-					_buffer = group;
-					_next = group.Length;
-					return;
-				}
-
 				if (_next + group.Length > _buffer.Length)
 				{
-					var nb = new byte[Math.Max(_next, 16) * 2 + group.Length];
-					Array.Copy(_buffer, nb, _buffer.Length);
-					Array.Copy(group, 0, nb, _next, group.Length);
+					var nextBuffer = ArrayPool<byte>.Shared.Rent(Math.Max(_next, 16) * 2 + group.Length);
+					Buffer.BlockCopy(_buffer, 0, nextBuffer, 0, _buffer.Length);
+					Buffer.BlockCopy(group, 0, nextBuffer, _next, group.Length);
+					ArrayPool<byte>.Shared.Return(_buffer);
+					_buffer = nextBuffer;
 					_next = _next + group.Length;
-					_buffer = nb;
 				}
 				else
 				{
-					Array.Copy(group, 0, _buffer, _next, group.Length);
+					Buffer.BlockCopy(group, 0, _buffer, _next, group.Length);
 					_next += group.Length;
 				}
 			}
 
 			public byte[] Get()
 			{
-				if (_buffer == null)
-					return new byte[0];
-
-				if (_buffer.Length != _next)
-				{
-					var b = new byte[_next];
-					Array.Copy(_buffer, b, _next);
-					return b;
-				}
-				return _buffer;
+				var ret = new byte[_next];
+				Buffer.BlockCopy(_buffer, 0, ret, 0, _next);
+				return ret;
 			}
 		}
 
@@ -228,7 +159,9 @@ namespace test
 				object oarg;
 
 				if (argn < args.Length)
+				{
 					oarg = args[argn];
+				}
 				else
 				{
 					if (b.repeat != 0)
@@ -273,9 +206,11 @@ namespace test
 				case '^':
 					b.conv = BigEndian;
 					return false;
+
 				case '_':
 					b.conv = LittleEndian;
 					return false;
+
 				case '%':
 					b.conv = Native;
 					return false;
@@ -717,7 +652,7 @@ namespace test
 
 			protected override void CopyBytes(byte[] from, int fromOffset, byte[] to, int toOffset, int count)
 			{
-				Array.Copy(from, fromOffset, to, toOffset, count);
+				Buffer.BlockCopy(from, fromOffset, to, toOffset, count);
 			}
 		}
 
@@ -745,7 +680,7 @@ namespace test
 
 			protected override void CopyBytes(byte[] from, int fromOffset, byte[] to, int toOffset, int count)
 			{
-				Array.Copy(from, fromOffset, to, toOffset, count);
+				Buffer.BlockCopy(from, fromOffset, to, toOffset, count);
 				Array.Reverse(to);
 			}
 		}

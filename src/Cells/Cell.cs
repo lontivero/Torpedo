@@ -6,7 +6,6 @@ namespace Torpedo
     abstract class Cell
     {
         public const int FixLengthCellSize = 514;
-        public const int MaxPayloadSize = 509;
 
         public uint CircuitId { get; }
         public CommandType Command { get; }
@@ -19,48 +18,43 @@ namespace Torpedo
 
         public byte[] ToByteArray(int protocolVersion)
         {
-            using(var mem = new MemoryStream())
-            {
-                WriteTo(mem, protocolVersion);
-                return mem.ToArray();
-            }
+            using var mem = new MemoryStream();
+            WriteTo(mem, protocolVersion);
+            return mem.ToArray();
         }
 
         public void WriteTo(Stream stream, int protocolVersion)
         {
-            using(var w = new BEBinaryWriter(stream))
+            using var writer = new BEBinaryWriter(stream);
+            if(protocolVersion >= 4)
             {
-                if(protocolVersion >= 4)
-                {
-                    w.Write((uint)CircuitId);
-                }
-                else
-                {
-                    w.Write((ushort)CircuitId);
-                }
-                w.Write((byte)Command);
-                WritePayload(w);
-                w.Flush();
+                writer.Write((uint)CircuitId);
             }
+            else
+            {
+                writer.Write((ushort)CircuitId);
+            }
+            writer.Write((byte)Command);
+            WritePayload(writer);
+            writer.Flush();
         }
 
         protected abstract void WritePayload(BinaryWriter writer);
         protected abstract void ReadPayload(BinaryReader reader);
+        protected abstract byte[] GetPayload();
 
         public static Cell ReadFrom(Stream stream, int protocolVersion)
         {
-            using(var reader = new BEBinaryReader(stream))
-            {
-                var circuitId = (protocolVersion >= 4) 
-                    ? (uint)reader.ReadUInt32()
-                    : (uint)reader.ReadUInt16();
+            using var reader = new BEBinaryReader(stream);
+            var circuitId = (protocolVersion >= 4) 
+                ? (uint)reader.ReadUInt32()
+                : (uint)reader.ReadUInt16();
 
-                var command = (CommandType)reader.ReadByte();
-                var cell = CreateFromCommand(circuitId, command);
-                cell.ReadPayload(reader);
+            var command = (CommandType)reader.ReadByte();
+            var cell = CreateFromCommand(circuitId, command);
+            cell.ReadPayload(reader);
 
-                return cell;
-            }
+            return cell;
         }
 
         private static Cell CreateFromCommand(uint circuitId, CommandType command)
@@ -77,7 +71,7 @@ namespace Torpedo
                 CommandType.NetInfo     => new NetInfoCell(circuitId),
                 CommandType.RelayEarly  => null,
                 CommandType.Create2  => null,
-                CommandType.Created2 => null,
+                CommandType.Created2 => new Created2Cell(circuitId),
                 CommandType.Versions => new VersionsCell(circuitId),
                 CommandType.VPadding => null,
                 CommandType.Certs => new CertsCell(circuitId),
@@ -91,6 +85,5 @@ namespace Torpedo
         {
             return command == CommandType.Versions || command >= CommandType.VPadding;
         }
-
     }
 }

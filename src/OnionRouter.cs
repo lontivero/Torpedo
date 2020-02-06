@@ -76,8 +76,8 @@ namespace Torpedo
                             KeyTap = sb.ToString();
                         }
                     }
-                    if(line.StartsWith("ntor-onion-key"))
-                        NTorKey = line.Substring(line.IndexOf(" "));
+                    if(line.StartsWith("ntor-onion-key "))
+                        NTorKey = line.Substring(line.IndexOf(" ")).Trim();
                 }
             }
         }
