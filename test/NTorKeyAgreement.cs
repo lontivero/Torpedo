@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using Torpedo;
 using Xunit;
 
@@ -43,18 +45,14 @@ namespace test
             //d4136c07e2e212bacf3a9ec1ea6f94ac83930505d184298f1ef18277ef7cc460
         }
 
-        private static byte[] ConvertFromBase64String(string input) {
-    if (String.IsNullOrWhiteSpace(input)) return null;
-    try {
-        string working = input.Replace('-', '+').Replace('_', '/'); ;
-        while (working.Length % 4 != 0) {
-            working += '=';
+        [Fact]
+        public void xxx()
+        {
+            var sk  = BigInteger.Parse("C23AB08ECF270D046C9C193D79B410C28DDC30B760A79C485BC48026214A3350", NumberStyles.HexNumber);
+            var pk = StringConverter.ToByteArray("A793BC077E1FCC725F0B0E4C8BC88431C1D696BFA39C09C482E90C598FCE2D58");
+
+            //var xx = Ed25519
         }
-        return Convert.FromBase64String(working);
-    } catch(Exception) {
-        return null;
-    }
-}
     }
 }
 

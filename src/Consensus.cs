@@ -47,7 +47,7 @@ namespace Torpedo
 
         private List<OnionRouter> _parsed = new List<OnionRouter>();
 
-        public async Task ParseAsync(Stream content, CancellationToken ct)
+        public async Task ParseAsync(Stream content, CancellationToken cancellationToken)
         {
             var expectedFlags = StatusEntryS.Running | StatusEntryS.Valid | StatusEntryS.Fast | StatusEntryS.Stable;
 
@@ -56,7 +56,7 @@ namespace Torpedo
             using var reader = new StreamReader(content);
             while(!reader.EndOfStream && _parsed.Count < 200)
             {
-                if(ct.IsCancellationRequested) return;
+                cancellationToken.ThrowIfCancellationRequested();
 
                 var line = await reader.ReadLineAsync().ConfigureAwait(false);
                 if(line.StartsWith("r "))

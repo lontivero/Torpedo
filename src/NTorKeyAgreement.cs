@@ -51,17 +51,18 @@ namespace Torpedo
             // # secret_input = EXP(Y,x) | EXP(B,x) | ID | B | X | Y | PROTOID
 
             var x = Ed25519.DecodeInt(Key);
-            var p1 = Y * x;
-            var p2 = B * x;
+            var X = PubKey;
+            var Yx = Y * x;
+            var Bx = B * x;
             var identity = StringConverter.ToByteArray(OnionRouter.Fingerprint);
-            var secretInput = ByteArrayHelpers.Combine(p1.EncodePoint(), p2.EncodePoint(), identity, B.EncodePoint(), PubKey.EncodePoint(), Y.EncodePoint(), PROTOCOL_ID);
+            var secretInput = ByteArrayHelpers.Combine(Yx.EncodePoint(), Bx.EncodePoint(), identity, B.EncodePoint(), X.EncodePoint(), Y.EncodePoint(), PROTOCOL_ID);
 
             // KEY_SEED = H(secret_input, t_key) -- Not used.
             // verify = H(secret_input, t_verify)
             var verify = new HMACSHA256(t_verify).ComputeHash(secretInput);
 
             // auth_input = verify | ID | B | Y | X | PROTOID | "Server"
-            var authInput = ByteArrayHelpers.Combine(verify, identity, B.EncodePoint(), Y.EncodePoint(), PubKey.EncodePoint(), PROTOCOL_ID, Encoding.ASCII.GetBytes("Server"));
+            var authInput = ByteArrayHelpers.Combine(verify, identity, B.EncodePoint(), Y.EncodePoint(), X.EncodePoint(), PROTOCOL_ID, Encoding.ASCII.GetBytes("Server"));
             var verify2 = new HMACSHA256(t_mac).ComputeHash(authInput);
 
             if( !auth.SequenceEqual(verify2) )

@@ -31,7 +31,7 @@ namespace Torpedo
             var payload = reader.ReadBytes(MaxPayloadSize);
             using var preader = new BEBinaryReader(new MemoryStream(payload)); 
             var len = preader.ReadUInt16();
-            Y = Ed25519Point.DecodePoint(preader.ReadBytes(32).Reverse().ToArray());
+            Y = Ed25519Point.DecodePoint(preader.ReadBytes(32));
             Auth = preader.ReadBytes(len - 32);
         }
     }

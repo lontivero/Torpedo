@@ -79,6 +79,12 @@ namespace Torpedo
             return sha512.ComputeHash(m);
         }
 
+        public static byte[] Sha256(this byte[] m)
+        {
+            using var sha256 = Kecc SHA256Managed.Create();
+            return sha256.ComputeHash(m);
+        }
+
         public static int GetBit(this byte[] h, int i)
         {
             return h[i / 8] >> (i % 8) & 1;
@@ -119,7 +125,7 @@ namespace Torpedo
         public static BigInteger Mod(this BigInteger num, BigInteger modulo)
         {
             var result = num % modulo;
-            return result.Sign == -1  ? result + modulo : result;
+            return result.Sign < 0  ? result + modulo : result;
         }
     }
 }

@@ -32,7 +32,7 @@ namespace Torpedo
                 x = Ed25519.Q - x;
             }
             var point = new Ed25519Point(x, y);
-            if (!point.IsOnCurve()) throw new ArgumentException("Decoding point that is not on curve");
+            // if (!point.IsOnCurve()) throw new ArgumentException("Decoding point that is not on curve");
             return point;
         }
 
@@ -50,9 +50,9 @@ namespace Torpedo
         {
             var xx = p.X * q.X;
             var yy = p.Y * q.Y;
-            var dtemp = Ed25519.D * xx * yy;
-            var x3 = (p.X * q.Y + q.X * p.Y) * (Inv(BigInteger.One + dtemp));
-            var y3 = (p.Y * q.Y + xx) * (Inv(BigInteger.One - dtemp));
+            var dxxyy = Ed25519.D * xx * yy;
+            var x3 = (p.X * q.Y + q.X * p.Y) * Inv(BigInteger.One + dxxyy);
+            var y3 = (p.Y * q.Y + xx) * Inv(BigInteger.One - dxxyy);
             return new Ed25519Point(x3.Mod(Ed25519.Q), y3.Mod(Ed25519.Q));
         }
 
@@ -60,9 +60,9 @@ namespace Torpedo
         {
             var xx = p.X * p.X;
             var yy = p.Y * p.Y;
-            var dtemp = Ed25519.D * xx * yy;
-            var x3 = (2 * p.X * p.Y) * (Inv(BigInteger.One + dtemp));
-            var y3 = (yy + xx) * (Inv(BigInteger.One - dtemp));
+            var dxxyy = Ed25519.D * xx * yy;
+            var x3 = (2 * p.X * p.Y) * Inv(BigInteger.One + dxxyy);
+            var y3 = (yy + xx) * Inv(BigInteger.One - dxxyy);
             return new Ed25519Point(x3.Mod(Ed25519.Q), y3.Mod(Ed25519.Q));
         }
 
@@ -81,8 +81,8 @@ namespace Torpedo
 
         private static BigInteger RecoverX(BigInteger y)
         {
-            var y2 = y * y;
-            var xx = (y2 - BigInteger.One) * Inv(Ed25519.D * y2 + BigInteger.One);
+            var yy = y * y;
+            var xx = (yy - BigInteger.One) * Inv(Ed25519.D * yy + BigInteger.One);
             var x = BigInteger.ModPow(xx, Ed25519.Qp3 / 8, Ed25519.Q);
 
             if (!(x * x - xx).Mod(Ed25519.Q).Equals(BigInteger.Zero))
