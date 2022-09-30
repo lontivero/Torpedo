@@ -6,70 +6,69 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Torpedo
+namespace Torpedo;
+
+class NTorKeyAgreement
 {
-    class NTorKeyAgreement
+    private readonly static byte[] PROTOCOL_ID = Encoding.ASCII.GetBytes("ntor-curve25519-sha256-1");
+    private readonly static byte[] t_mac = Encoding.ASCII.GetBytes("ntor-curve25519-sha256-1:mac");
+    private readonly static byte[] t_key = Encoding.ASCII.GetBytes("ntor-curve25519-sha256-1:key_extract");
+    private readonly static byte[] t_verify = Encoding.ASCII.GetBytes("ntor-curve25519-sha256-1:verify");
+    private readonly static byte[] m_expand = Encoding.ASCII.GetBytes("ntor-curve25519-sha256-1:key_expand");
+
+    private Logger logger = Logger.GetLogger<NTorKeyAgreement>();
+    public OnionRouter OnionRouter { get; }
+    public byte[] Key { get; }
+    public Ed25519Point PubKey { get; }
+    public Ed25519Point B { get; }
+    public byte[] Handshake { get; }
+
+    public NTorKeyAgreement(OnionRouter onionRouter)
     {
-        private readonly static byte[] PROTOCOL_ID = Encoding.ASCII.GetBytes("ntor-curve25519-sha256-1");
-        private readonly static byte[] t_mac = Encoding.ASCII.GetBytes("ntor-curve25519-sha256-1:mac");
-        private readonly static byte[] t_key = Encoding.ASCII.GetBytes("ntor-curve25519-sha256-1:key_extract");
-        private readonly static byte[] t_verify = Encoding.ASCII.GetBytes("ntor-curve25519-sha256-1:verify");
-        private readonly static byte[] m_expand = Encoding.ASCII.GetBytes("ntor-curve25519-sha256-1:key_expand");
+        OnionRouter = onionRouter;
+        var buffer = new byte[32];
+        RNGCryptoServiceProvider.Create().GetBytes(buffer);
+        Key = buffer;
+        PubKey = Ed25519.PublicKey(Key); 
+        B = Ed25519Point.DecodePoint(Convert.FromBase64String(onionRouter.NTorKey));
 
-        private Logger logger = Logger.GetLogger<NTorKeyAgreement>();
-        public OnionRouter OnionRouter { get; }
-        public byte[] Key { get; }
-        public Ed25519Point PubKey { get; }
-        public Ed25519Point B { get; }
-        public byte[] Handshake { get; }
+        var identity = StringConverter.ToByteArray(onionRouter.Fingerprint);
+        Handshake = ByteArrayHelpers.Combine(identity, B.EncodePoint(), PubKey.EncodePoint());
+    }
 
-        public NTorKeyAgreement(OnionRouter onionRouter)
+    public void CompleteHandshake(Ed25519Point Y, byte[] auth)
+    {
+        // :type Y: bytes
+        // :type auth: bytes
+        // 
+        // The server's handshake reply is:
+        //     SERVER_PK   Y                       [G_LENGTH bytes]
+        //     AUTH        H(auth_input, t_mac)    [H_LENGTH bytes]
+        // 
+        // Updates the onion router's shared secret with the computed key.
+        // 
+        // # The client then checks Y is in G^* [see NOTE below], and computes
+        // # secret_input = EXP(Y,x) | EXP(B,x) | ID | B | X | Y | PROTOID
+
+        var x = Ed25519.DecodeInt(Key);
+        var X = PubKey;
+        var Yx = Y * x;
+        var Bx = B * x;
+        var identity = StringConverter.ToByteArray(OnionRouter.Fingerprint);
+        var secretInput = ByteArrayHelpers.Combine(Yx.EncodePoint(), Bx.EncodePoint(), identity, B.EncodePoint(), X.EncodePoint(), Y.EncodePoint(), PROTOCOL_ID);
+
+        // KEY_SEED = H(secret_input, t_key) -- Not used.
+        // verify = H(secret_input, t_verify)
+        var verify = new HMACSHA256(t_verify).ComputeHash(secretInput);
+
+        // auth_input = verify | ID | B | Y | X | PROTOID | "Server"
+        var authInput = ByteArrayHelpers.Combine(verify, identity, B.EncodePoint(), Y.EncodePoint(), X.EncodePoint(), PROTOCOL_ID, Encoding.ASCII.GetBytes("Server"));
+        var verify2 = new HMACSHA256(t_mac).ComputeHash(authInput);
+
+        if( !auth.SequenceEqual(verify2) )
         {
-            OnionRouter = onionRouter;
-            var buffer = new byte[32];
-            RNGCryptoServiceProvider.Create().GetBytes(buffer);
-            Key = buffer;
-            PubKey = Ed25519.PublicKey(Key); 
-            B = Ed25519Point.DecodePoint(Convert.FromBase64String(onionRouter.NTorKey));
-
-            var identity = StringConverter.ToByteArray(onionRouter.Fingerprint);
-            Handshake = ByteArrayHelpers.Combine(identity, B.EncodePoint(), PubKey.EncodePoint());
-        }
-
-        public void CompleteHandshake(Ed25519Point Y, byte[] auth)
-        {
-            // :type Y: bytes
-            // :type auth: bytes
-            // 
-            // The server's handshake reply is:
-            //     SERVER_PK   Y                       [G_LENGTH bytes]
-            //     AUTH        H(auth_input, t_mac)    [H_LENGTH bytes]
-            // 
-            // Updates the onion router's shared secret with the computed key.
-            // 
-            // # The client then checks Y is in G^* [see NOTE below], and computes
-            // # secret_input = EXP(Y,x) | EXP(B,x) | ID | B | X | Y | PROTOID
-
-            var x = Ed25519.DecodeInt(Key);
-            var X = PubKey;
-            var Yx = Y * x;
-            var Bx = B * x;
-            var identity = StringConverter.ToByteArray(OnionRouter.Fingerprint);
-            var secretInput = ByteArrayHelpers.Combine(Yx.EncodePoint(), Bx.EncodePoint(), identity, B.EncodePoint(), X.EncodePoint(), Y.EncodePoint(), PROTOCOL_ID);
-
-            // KEY_SEED = H(secret_input, t_key) -- Not used.
-            // verify = H(secret_input, t_verify)
-            var verify = new HMACSHA256(t_verify).ComputeHash(secretInput);
-
-            // auth_input = verify | ID | B | Y | X | PROTOID | "Server"
-            var authInput = ByteArrayHelpers.Combine(verify, identity, B.EncodePoint(), Y.EncodePoint(), X.EncodePoint(), PROTOCOL_ID, Encoding.ASCII.GetBytes("Server"));
-            var verify2 = new HMACSHA256(t_mac).ComputeHash(authInput);
-
-            if( !auth.SequenceEqual(verify2) )
-            {
-                logger.Error("Server handshake doesn't match verification.");
-                throw new  Exception("Server handshake doesn't match verificaiton.");
-            }
+            logger.Error("Server handshake doesn't match verification.");
+            throw new  Exception("Server handshake doesn't match verificaiton.");
         }
     }
 }

@@ -1,39 +1,38 @@
 using System.Collections.Generic;
 using System.IO;
 
-namespace Torpedo
+namespace Torpedo;
+
+class VersionsCell : VariableLengthCell
 {
-    class VersionsCell : VariableLengthCell
+    public ushort[] Versions { get; private set; }
+
+    public VersionsCell(uint circuitId, params ushort[] versions)
+        : base(circuitId, CommandType.Versions)
     {
-        public ushort[] Versions { get; private set; }
+        Versions = versions;
+    }
 
-        public VersionsCell(uint circuitId, params ushort[] versions)
-            : base(circuitId, CommandType.Versions)
+    protected override void ReadPayload(BinaryReader reader)
+    {
+        var payloadLength = reader.ReadUInt16();
+        var verCount = payloadLength / sizeof(ushort);
+        var vers = new List<ushort>(verCount);
+        for(var i=0; i < verCount; i++)
         {
-            Versions = versions;
+            vers.Add(reader.ReadUInt16());
         }
+        Versions = vers.ToArray();
+    }
 
-        protected override void ReadPayload(BinaryReader reader)
+    protected override byte[] GetPayload()
+    {
+        using var mem = new MemoryStream(Versions.Length * sizeof(ushort));
+        using var writer = new BEBinaryWriter(mem);
+        foreach(var ver in Versions)
         {
-            var payloadLength = reader.ReadUInt16();
-            var verCount = payloadLength / sizeof(ushort);
-            var vers = new List<ushort>(verCount);
-            for(var i=0; i < verCount; i++)
-            {
-                vers.Add(reader.ReadUInt16());
-            }
-            Versions = vers.ToArray();
+            writer.Write(ver);
         }
-
-        protected override byte[] GetPayload()
-        {
-            using var mem = new MemoryStream(Versions.Length * sizeof(ushort));
-            using var writer = new BEBinaryWriter(mem);
-            foreach(var ver in Versions)
-            {
-                writer.Write(ver);
-            }
-            return mem.ToArray();
-        }
+        return mem.ToArray();
     }
 }

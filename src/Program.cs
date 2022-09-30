@@ -3,19 +3,14 @@ using System.Threading;
 using System.Threading.Tasks;
 
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("TorpedoTests")]
-namespace Torpedo
+namespace Torpedo;
+
+class Program
 {
-    class Program
+    public static async Task Main(string[] args) 
     {
-        private static CancellationTokenSource cts;
-        
-        public static async Task Main(string[] args) 
-        {
-            Console.WriteLine("Hello World!");
-            var torpedo = new Torpedo();
-            cts = new CancellationTokenSource();
-            await torpedo.InitializeAsync(cts.Token);
-            await torpedo.GetAsync("http://ljxhgchpkhjbaioeaijwejewxnap.onion", cts.Token);
-        }
+        var torpedo = new Torpedo();
+        var cts = new CancellationTokenSource();
+        await torpedo.GetAsync("http://wasabiwallet.io", cts.Token);
     }
 }

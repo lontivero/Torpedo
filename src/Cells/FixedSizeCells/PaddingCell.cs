@@ -1,24 +1,23 @@
 using System;
 using System.IO;
 
-namespace Torpedo
+namespace Torpedo;
+
+class PaddingCell : FixedLengthCell
 {
-    class PaddingCell : FixedLengthCell
+    public PaddingCell(uint circuitId)
+        : base(circuitId, CommandType.Padding)
     {
-        public PaddingCell(uint circuitId)
-            : base(circuitId, CommandType.Padding)
-        {
-        }
+    }
 
-        protected override byte[] GetPayload()
-        {
-            return new byte[0];
-        }
+    protected override byte[] GetPayload()
+    {
+        return new byte[0];
+    }
 
-        protected override void ReadPayload(BinaryReader reader)
-        {
-            var payloadLength = reader.ReadUInt16();
-            reader.ReadBytes(payloadLength); // ignore it;
-        }
+    protected override void ReadPayload(BinaryReader reader)
+    {
+        var payloadLength = reader.ReadUInt16();
+        reader.ReadBytes(payloadLength); // ignore it;
     }
 }

@@ -1,41 +1,40 @@
 using System;
 using System.IO;
 
-namespace Torpedo
+namespace Torpedo;
+
+enum HandshakeType
 {
-    enum HandshakeType
+    Tap = 1,
+    NTor = 2
+};
+
+class Create2Cell : FixedLengthCell
+{
+    public HandshakeType HandshakeType { get; }
+    public byte[] Handshake { get; }
+
+    public Create2Cell(uint circuitId, HandshakeType handshakeType, byte[] handshake)
+        : base(circuitId, CommandType.Create2)
     {
-        Tap = 1,
-        NTor = 2
-    };
+        HandshakeType = handshakeType;
+        Handshake = handshake;
+    }
 
-    class Create2Cell : FixedLengthCell
+    protected override byte[] GetPayload()
     {
-        public HandshakeType HandshakeType { get; }
-        public byte[] Handshake { get; }
+        using var mem = new MemoryStream();
+        using var writer = new BEBinaryWriter(mem);
 
-        public Create2Cell(uint circuitId, HandshakeType handshakeType, byte[] handshake)
-            : base(circuitId, CommandType.Create2)
-        {
-            HandshakeType = handshakeType;
-            Handshake = handshake;
-        }
+        writer.Write((short)HandshakeType);
+        writer.Write((short)Handshake.Length);
+        writer.Write(Handshake);
+        return mem.ToArray();
+    }
 
-        protected override byte[] GetPayload()
-        {
-            using var mem = new MemoryStream();
-            using var writer = new BEBinaryWriter(mem);
-
-            writer.Write((short)HandshakeType);
-            writer.Write((short)Handshake.Length);
-            writer.Write(Handshake);
-            return mem.ToArray();
-        }
-
-        protected override void ReadPayload(BinaryReader reader)
-        {
-            var payloadLength = reader.ReadUInt16();
-            reader.ReadBytes(payloadLength); // ignore it;
-        }
+    protected override void ReadPayload(BinaryReader reader)
+    {
+        var payloadLength = reader.ReadUInt16();
+        reader.ReadBytes(payloadLength); // ignore it;
     }
 }

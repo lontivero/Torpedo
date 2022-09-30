@@ -1,24 +1,21 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 
-namespace Torpedo
+namespace Torpedo;
+
+class AuthChallengeCell : VariableLengthCell
 {
-
-    class AuthChallengeCell : VariableLengthCell
+    public AuthChallengeCell(uint circuitId)
+        : base(circuitId, CommandType.AuthChallenge)
     {
-        public AuthChallengeCell(uint circuitId)
-            : base(circuitId, CommandType.AuthChallenge)
-        {
-        }
+    }
 
-        protected override byte[] GetPayload()
-        {
-            return new byte[0];
-        }
+    protected override byte[] GetPayload() => 
+        Array.Empty<byte>();
 
-        protected override void ReadPayload(BinaryReader reader)
-        {
-            var payloadLength = reader.ReadUInt16();
-            var certs = reader.ReadBytes(payloadLength); // ignore it;
-        }
+    protected override void ReadPayload(BinaryReader reader)
+    {
+        var payloadLength = reader.ReadUInt16();
+        var certs = reader.ReadBytes(payloadLength); // ignore it;
     }
 }
