@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -7,39 +8,48 @@ using Xunit;
 
 namespace test;
 
+public static class LinqExtensions
+{
+    public static IEnumerable<IEnumerable<T>> SplitBy<T>(this IEnumerable<T> source, Func<T, bool> when)
+    {
+        int grouper = 0;
+        return source
+            .GroupBy(x => grouper += when(x) ? 1 : 0)
+            .Select(x => x.AsEnumerable().Where(x => !when(x)))
+            .Where(x => x.Any());
+    }
+}
+
 public class Ed25519Tests
 {
     [Fact]
     public void Test1()
     {
-        var vectors = File.ReadAllLines("data/ed25519-vectors.txt");
-        var testData = new Dictionary<string, byte[]>();
-        var curTest = string.Empty;
+        var vectors = File
+            .ReadAllLines("data/ed25519-vectors.txt")
+            .Where(line => !line.StartsWith("#"))
+            .SplitBy(line => string.IsNullOrWhiteSpace(line))
+            .Select(tst => tst
+                .Select(line => line.Split(':'))
+                .Select(parts => (parts[0].Trim(), parts[1].Trim()))
+                .ToDictionary(x => x.Item1, x => x.Item2)
+            )
+            .Select(x => new
+            {
+                Name = x["TST"],
+                SecretKey = StringConverter.ToByteArray(x["SK"]),
+                PublicKey = Ed25519Point.DecodePoint(StringConverter.ToByteArray(x["PK"])),
+                Message = StringConverter.ToByteArray(x["MSG"]),
+                Signature = StringConverter.ToByteArray(x["SIG"])
+            });
             
-        foreach(var line in vectors)
+        foreach (var vector in vectors)
         {
-            if (string.IsNullOrWhiteSpace(line) 
-                || line.StartsWith("#"))
-                continue;
-
-            if (line.StartsWith("TST"))
-            {
-                curTest = line;
-                continue;
-            }
-
-            var keyValuePair = line.Split(':');
-            var (key, value) = (keyValuePair[0].Trim(), StringConverter.ToByteArray(keyValuePair[1].Trim()));
-            testData[key] = value;
-
-            if(key == "SIG")
-            {
-                var (sk, pk, msg) = (testData["SK"], Ed25519Point.DecodePoint(testData["PK"]), testData["MSG"]);
-                var signature = Ed25519.Signature(msg, sk, pk);
-                Assert.Equal(testData["SIG"], signature);
-            }
+            var signature = Ed25519.Signature(vector.Message, vector.SecretKey, vector.PublicKey);
+            Assert.Equal(vector.Signature, signature);
         }
     }
+
 
     private byte[] Version = new byte[]{ 3 };
 

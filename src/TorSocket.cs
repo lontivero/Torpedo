@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Net;
 using System.Net.Security;
@@ -10,12 +11,14 @@ namespace Torpedo;
 
 class TorSocket
 {
-    private readonly Logger logger = Logger.GetLogger<TorSocket>();
+    private readonly Logger _logger = Logger.GetLogger<TorSocket>();
 
-    private readonly List<int> _protocolVersions = new List<int>();
+    private readonly List<int> _protocolVersions = new ();
 
     public int ProtocolVersion => _protocolVersions.Any() ?  _protocolVersions.Max() : 0;
     private SslStream _stream;
+    private TorSreamReader _reader;
+    private TorStreamWriter _writer;
 
     public OnionRouter GuardRelay { get; }
     public IPAddress MyIPAddress { get; private set; }
@@ -27,7 +30,7 @@ class TorSocket
 
     public void Connect()
     {
-        logger.Debug($"Connecting guard relay {GuardRelay.TorEndPoint}");
+        _logger.Debug($"Connecting guard relay {GuardRelay.TorEndPoint}");
         var socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
         socket.Connect(GuardRelay.TorEndPoint);
         var networkStream = new NetworkStream(socket, false);
@@ -36,12 +39,14 @@ class TorSocket
             new RemoteCertificateValidationCallback(ValidateServerCertificate), null);
         _stream.AuthenticateAsClient(GuardRelay.TorEndPoint.Address.ToString());
 
+        _reader = new TorSreamReader(_stream, 0);
+        _writer = new TorStreamWriter(_stream, 0);
         Handshake();
     }
 
     private void Handshake()
     {
-        logger.Debug($"Handshaking....");
+        _logger.Debug($"Handshaking....");
         SendVersions();
         RetrieveVersions();
 
@@ -59,7 +64,7 @@ class TorSocket
 
     private void SendVersions()
     {
-        logger.Debug($"...Sending version +4");
+        _logger.Debug($"...Sending version +4");
         SendCell(new VersionsCell(0, 4));
     }
 
@@ -71,43 +76,44 @@ class TorSocket
             _protocolVersions.Add(ver);
         }
 
-        logger.Debug($"...Received versions [{string.Join(", ", _protocolVersions)}]" );
+        _logger.Debug($"...Received versions [{string.Join(", ", _protocolVersions)}]" );
     }
 
     private void RetrieveCerts()
     {
-        logger.Debug("Retrieving CERTS cell...");
-        Cell.ReadFrom(_stream, ProtocolVersion);
-        logger.Debug("Retrieving AUTH_CHALLENGE cell...");
-        Cell.ReadFrom(_stream, ProtocolVersion);
+        _logger.Debug("Retrieving CERTS cell...");
+        RetrieveCell<CertsCell>();
+        _logger.Debug("Retrieving AUTH_CHALLENGE cell...");
+        RetrieveCell<AuthChallengeCell>();
     }
 
     private void RetrieveNetInfo()
     {
-        logger.Debug("Retrieving NET_INFO cell...");
+        _logger.Debug("Retrieving NET_INFO cell...");
         var netInfo = RetrieveCell<NetInfoCell>();
         MyIPAddress = netInfo.MyIPAddress;
 
-        logger.Debug($"...Received Timestamp {netInfo.Timestamp} {netInfo.MyIPAddress}");
+        _logger.Debug($"...Received Timestamp {netInfo.Timestamp} {netInfo.MyIPAddress}");
     }
 
     private void SendNetInfo()
     {
-        var netInfo = new NetInfoCell(0);
-        netInfo.Timestamp = DateTimeOffset.UtcNow;
-        netInfo.MyIPAddress = this.GuardRelay.TorEndPoint.Address;
-        netInfo.OtherIPs.Add(MyIPAddress);
+        var netInfo = new NetInfoCell(
+            CircuitId: 0, 
+            Timestamp: DateTimeOffset.UtcNow,
+            MyIPAddress: GuardRelay.TorEndPoint.Address,
+            OtherIPs: ImmutableList.Create(MyIPAddress));
         SendCell(netInfo);
-        logger.Debug($"...Sending Timestamp {netInfo.Timestamp} {netInfo.MyIPAddress}");
+        _logger.Debug($"...Sending Timestamp {netInfo.Timestamp} {netInfo.MyIPAddress}");
     }
 
-    internal void SendCell(Cell cell)
+    internal void SendCell(ICell cell)
     {
-        cell.WriteTo(_stream, ProtocolVersion);
+        _writer.Write(cell);
     }
 
-    internal T RetrieveCell<T>() where T: Cell
+    internal T RetrieveCell<T>() where T: class, ICell
     {
-        return Cell.ReadFrom(_stream, ProtocolVersion) as T;
+        return _reader.ReadCell() as T;
     }
 }
